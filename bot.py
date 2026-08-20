@@ -1,1 +1,34 @@
+import os
 
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🤖 ربات با موفقیت فعال شد!\n\n"
+        "سلام 👋"
+    )
+
+
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🏓 ربات فعاله!")
+
+
+def main():
+    token = os.getenv("BOT_TOKEN")
+
+    if not token:
+        raise RuntimeError("BOT_TOKEN پیدا نشد!")
+
+    app = Application.builder().token(token).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ping", ping))
+
+    print("🤖 Bot started...")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
