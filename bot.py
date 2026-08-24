@@ -398,7 +398,7 @@ async def button_handler(
 
     if query.data == "buy":
 
-        def buy_menu():
+    def buy_menu():
 
     return InlineKeyboardMarkup([
         [
@@ -426,7 +426,6 @@ async def button_handler(
             )
         ]
     ])
-
         
 
 
