@@ -398,12 +398,36 @@ async def button_handler(
 
     if query.data == "buy":
 
-        await query.edit_message_text(
-            "🛒 یکی از کانفیگ‌ها را انتخاب کنید:",
-            reply_markup=buy_menu()
-        )
+        def buy_menu():
 
-        return
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "36 گیگ | 1 ماهه | 200 تومان",
+                callback_data="buy_36"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "78 گیگ | 1 ماهه | 300 تومان",
+                callback_data="buy_78"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "128 گیگ | 3 ماهه | 550 تومان",
+                callback_data="buy_128"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 برگشت",
+                callback_data="back"
+            )
+        ]
+    ])
+
+        
 
 
 
