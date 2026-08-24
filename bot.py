@@ -5,7 +5,7 @@ import logging
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
+    InlineKeyboardMarkup
 )
 
 from telegram.ext import (
@@ -14,19 +14,19 @@ from telegram.ext import (
     CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
-    filters,
+    filters
 )
 
 
-# =========================
+# =====================
 # تنظیمات
-# =========================
+# =====================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 OWNER_ID = 6303851350
 
-CHANNEL_ID = "@etlaeeeeeee"
+CHANNEL = "@etlaeeeeeee"
 CHANNEL_LINK = "https://t.me/etlaeeeeeee"
 
 CARD_NUMBER = "6219861853906500"
@@ -35,18 +35,14 @@ CARD_NAME = "تکین درویشی"
 DATA_FILE = "data.json"
 
 
-# =========================
-# لاگ
-# =========================
-
 logging.basicConfig(
     level=logging.INFO
 )
 
 
-# =========================
+# =====================
 # دیتابیس
-# =========================
+# =====================
 
 def load_data():
 
@@ -64,13 +60,24 @@ def load_data():
         return data
 
 
-    with open(
-        DATA_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
+    try:
 
-        return json.load(f)
+        with open(
+            DATA_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            return json.load(f)
+
+    except:
+
+        return {
+            "owner": OWNER_ID,
+            "enabled": True,
+            "users": {},
+            "reply": {}
+        }
 
 
 
@@ -94,9 +101,9 @@ db = load_data()
 
 
 
-# =========================
-# کاربر
-# =========================
+# =====================
+# ساخت کاربر
+# =====================
 
 def create_user(user_id):
 
@@ -105,25 +112,21 @@ def create_user(user_id):
     if user_id not in db["users"]:
 
         db["users"][user_id] = {
-
-            "referrals": [],
-
+            "refs": [],
             "claimed": 0,
-
             "gift": False,
-
-            "request": None
+            "buy": None
         }
 
         save_data(db)
 
 
 
-# =========================
-# عضویت کانال
-# =========================
+# =====================
+# چک عضویت کانال
+# =====================
 
-async def check_join(
+async def check_channel(
     user_id,
     context
 ):
@@ -131,7 +134,7 @@ async def check_join(
     try:
 
         member = await context.bot.get_chat_member(
-            CHANNEL_ID,
+            CHANNEL,
             user_id
         )
 
@@ -147,13 +150,13 @@ async def check_join(
 
 
 
-# =========================
+# =====================
 # منوی اصلی
-# =========================
+# =====================
 
 def main_menu(user_id):
 
-    keyboard = [
+    buttons = [
 
         [
             InlineKeyboardButton(
@@ -171,10 +174,11 @@ def main_menu(user_id):
 
         [
             InlineKeyboardButton(
-                "📢 کانال ما",
+                "📢 کانال",
                 url=CHANNEL_LINK
             )
         ]
+
     ]
 
 
@@ -186,7 +190,7 @@ def main_menu(user_id):
 
     if user.get("gift"):
 
-        keyboard.append(
+        buttons.append(
             [
                 InlineKeyboardButton(
                     "🎁 دریافت کانفیگ زیرمجموعه",
@@ -197,37 +201,37 @@ def main_menu(user_id):
 
 
     return InlineKeyboardMarkup(
-        keyboard
+        buttons
     )
 
 
 
-# =========================
+# =====================
 # منوی خرید
-# =========================
+# =====================
 
 def buy_menu():
 
-    keyboard = [
+    return InlineKeyboardMarkup([
 
         [
             InlineKeyboardButton(
                 "36 گیگ | 1 ماهه | 200 تومان",
-                callback_data="buy_36"
+                callback_data="buy36"
             )
         ],
 
         [
             InlineKeyboardButton(
                 "78 گیگ | 1 ماهه | 300 تومان",
-                callback_data="buy_78"
+                callback_data="buy78"
             )
         ],
 
         [
             InlineKeyboardButton(
                 "128 گیگ | 3 ماهه | 550 تومان",
-                callback_data="buy_128"
+                callback_data="buy128"
             )
         ],
 
@@ -238,17 +242,13 @@ def buy_menu():
             )
         ]
 
-    ]
-
-    return InlineKeyboardMarkup(
-        keyboard
-    )
+    ])
 
 
 
-# =========================
-# شروع
-# =========================
+# =====================
+# استارت
+# =====================
 
 async def start(
     update: Update,
@@ -258,19 +258,16 @@ async def start(
     user = update.effective_user
 
 
-    joined = await check_join(
+    if not await check_channel(
         user.id,
         context
-    )
-
-
-    if not joined:
+    ):
 
         keyboard = [
 
             [
                 InlineKeyboardButton(
-                    "📢 عضویت در کانال",
+                    "📢 عضویت کانال",
                     url=CHANNEL_LINK
                 )
             ],
@@ -278,7 +275,7 @@ async def start(
             [
                 InlineKeyboardButton(
                     "🔄 بررسی عضویت",
-                    callback_data="check_join"
+                    callback_data="check"
                 )
             ]
 
@@ -286,10 +283,13 @@ async def start(
 
 
         await update.message.reply_text(
-            "⚠️ ابتدا عضو کانال شوید.",
+
+            "⚠️ اول عضو کانال شوید.",
+
             reply_markup=InlineKeyboardMarkup(
                 keyboard
             )
+
         )
 
         return
@@ -301,35 +301,36 @@ async def start(
 
 
     await update.message.reply_text(
-        "🤖 خوش آمدید\n\n"
-        "یکی از گزینه‌ها را انتخاب کنید:",
+
+        "🤖 خوش آمدید",
+
         reply_markup=main_menu(
             user.id
         )
-    )
-    # =========================
-# ثبت زیرمجموعه
-# =========================
 
-def add_referral(inviter, user_id):
+    )
+# =====================
+# اضافه کردن زیرمجموعه
+# =====================
+
+def add_ref(inviter, new_user):
 
     inviter = str(inviter)
-    user_id = str(user_id)
+    new_user = str(new_user)
 
-    if inviter == user_id:
+    if inviter == new_user:
         return
 
-    if inviter not in db["users"]:
+    create_user(inviter)
+    create_user(new_user)
+
+    refs = db["users"][inviter]["refs"]
+
+    if new_user in refs:
         return
 
-    refs = db["users"][inviter]["referrals"]
+    refs.append(new_user)
 
-    if user_id in refs:
-        return
-
-    refs.append(user_id)
-
-    # هر 3 نفر یک گیگ
     if len(refs) - db["users"][inviter]["claimed"] >= 3:
 
         db["users"][inviter]["gift"] = True
@@ -338,24 +339,26 @@ def add_referral(inviter, user_id):
 
 
 
-# =========================
-# ساخت لینک دعوت
-# =========================
+# =====================
+# لینک دعوت
+# =====================
 
-async def get_ref_link(context, user_id):
+async def referral_link(
+    context,
+    user_id
+):
 
     bot = await context.bot.get_me()
 
     return (
-        f"https://t.me/{bot.username}"
-        f"?start={user_id}"
+        f"https://t.me/{bot.username}?start={user_id}"
     )
 
 
 
-# =========================
-# دکمه‌ها
-# =========================
+# =====================
+# دکمه ها
+# =====================
 
 async def button_handler(
     update: Update,
@@ -367,26 +370,31 @@ async def button_handler(
     await query.answer()
 
     user = query.from_user
-    user_id = user.id
+
+    uid = user.id
+
 
 
     # بررسی عضویت
 
-    if query.data == "check_join":
+    if query.data == "check":
 
-        if await check_join(user_id, context):
+        if await check_channel(uid, context):
 
-            create_user(user_id)
+            create_user(uid)
 
             await query.edit_message_text(
-                "✅ عضویت تایید شد.",
-                reply_markup=main_menu(user_id)
+
+                "✅ تایید شد",
+
+                reply_markup=main_menu(uid)
+
             )
 
         else:
 
             await query.answer(
-                "❌ هنوز عضو کانال نیستید.",
+                "هنوز عضو کانال نیستید",
                 show_alert=True
             )
 
@@ -398,56 +406,33 @@ async def button_handler(
 
     if query.data == "buy":
 
-    def buy_menu():
+        await query.edit_message_text(
 
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "36 گیگ | 1 ماهه | 200 تومان",
-                callback_data="buy_36"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "78 گیگ | 1 ماهه | 300 تومان",
-                callback_data="buy_78"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "128 گیگ | 3 ماهه | 550 تومان",
-                callback_data="buy_128"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "🔙 برگشت",
-                callback_data="back"
-            )
-        ]
-    ])
-        
+            "🛒 انتخاب کانفیگ:",
+
+            reply_markup=buy_menu()
+
+        )
+
+        return
 
 
 
-    # 36 گیگ
+    # خرید 36
 
-    if query.data == "buy_36":
+    if query.data == "buy36":
 
-        db["users"][str(user_id)]["request"] = "36"
+        db["users"][str(uid)]["buy"] = "36 گیگ"
 
         save_data(db)
 
         await query.edit_message_text(
 
-            "📦 کانفیگ 36 گیگ\n"
-            "⏱ مدت: 1 ماه\n"
-            "💰 قیمت: 200 تومان\n\n"
-
-            f"💳 کارت:\n{CARD_NUMBER}\n\n"
-
-            f"👤 به نام:\n{CARD_NAME}\n\n"
-
+            "📦 36 گیگ\n"
+            "⏱ یک ماهه\n"
+            "💰 200 تومان\n\n"
+            f"💳 {CARD_NUMBER}\n"
+            f"👤 {CARD_NAME}\n\n"
             "بعد از پرداخت عکس رسید را ارسال کنید."
 
         )
@@ -456,24 +441,21 @@ async def button_handler(
 
 
 
-    # 78 گیگ
+    # خرید 78
 
-    if query.data == "buy_78":
+    if query.data == "buy78":
 
-        db["users"][str(user_id)]["request"] = "78"
+        db["users"][str(uid)]["buy"] = "78 گیگ"
 
         save_data(db)
 
         await query.edit_message_text(
 
-            "📦 کانفیگ 78 گیگ\n"
-            "⏱ مدت: 1 ماه\n"
-            "💰 قیمت: 300 تومان\n\n"
-
-            f"💳 کارت:\n{CARD_NUMBER}\n\n"
-
-            f"👤 به نام:\n{CARD_NAME}\n\n"
-
+            "📦 78 گیگ\n"
+            "⏱ یک ماهه\n"
+            "💰 300 تومان\n\n"
+            f"💳 {CARD_NUMBER}\n"
+            f"👤 {CARD_NAME}\n\n"
             "بعد از پرداخت عکس رسید را ارسال کنید."
 
         )
@@ -482,24 +464,21 @@ async def button_handler(
 
 
 
-    # 128 گیگ
+    # خرید 128
 
-    if query.data == "buy_128":
+    if query.data == "buy128":
 
-        db["users"][str(user_id)]["request"] = "128"
+        db["users"][str(uid)]["buy"] = "128 گیگ"
 
         save_data(db)
 
         await query.edit_message_text(
 
-            "📦 کانفیگ 128 گیگ\n"
-            "⏱ مدت: 3 ماه\n"
-            "💰 قیمت: 550 تومان\n\n"
-
-            f"💳 کارت:\n{CARD_NUMBER}\n\n"
-
-            f"👤 به نام:\n{CARD_NAME}\n\n"
-
+            "📦 128 گیگ\n"
+            "⏱ سه ماهه\n"
+            "💰 550 تومان\n\n"
+            f"💳 {CARD_NUMBER}\n"
+            f"👤 {CARD_NAME}\n\n"
             "بعد از پرداخت عکس رسید را ارسال کنید."
 
         )
@@ -512,28 +491,23 @@ async def button_handler(
 
     if query.data == "ref":
 
-        link = await get_ref_link(
+        link = await referral_link(
             context,
-            user_id
+            uid
         )
 
         count = len(
-            db["users"][str(user_id)]["referrals"]
+            db["users"][str(uid)]["refs"]
         )
-
 
         await query.edit_message_text(
 
-            "👥 سیستم زیرمجموعه\n\n"
-
+            "👥 زیرمجموعه\n\n"
             f"تعداد دعوت: {count}\n\n"
+            "هر 3 نفر = 1 گیگ 🎁\n\n"
+            f"لینک شما:\n{link}",
 
-            "هر 3 نفر = 1 گیگ هدیه 🎁\n\n"
-
-            "لینک شما:\n"
-            f"{link}",
-
-            reply_markup=main_menu(user_id)
+            reply_markup=main_menu(uid)
 
         )
 
@@ -545,72 +519,52 @@ async def button_handler(
 
     if query.data == "gift":
 
-        user_data = db["users"].get(
-            str(user_id)
-        )
+        info = db["users"][str(uid)]
 
 
-        if not user_data["gift"]:
+        if not info["gift"]:
 
             await query.answer(
-                "هنوز شرایط کامل نشده.",
+                "شرایط کامل نیست",
                 show_alert=True
             )
 
             return
 
 
+
         text = (
 
-            "🎁 درخواست کانفیگ زیرمجموعه\n\n"
-
-            f"👤 نام: {user.full_name}\n"
-
-            f"🆔 آیدی: {user.id}\n"
-
-            f"🔗 یوزرنیم: @{user.username if user.username else 'ندارد'}\n\n"
-
-            "کاربر 3 زیرمجموعه آورده است."
+            "🎁 درخواست گیگ زیرمجموعه\n\n"
+            f"👤 {user.full_name}\n"
+            f"🆔 {uid}\n"
+            f"🔗 @{user.username or 'ندارد'}\n\n"
+            "3 زیرمجموعه آورده است."
 
         )
-
-
-        keyboard = [
-
-            [
-                InlineKeyboardButton(
-                    "💬 پاسخ",
-                    callback_data=f"reply_{user.id}"
-                )
-            ]
-
-        ]
 
 
         await context.bot.send_message(
 
             chat_id=db["owner"],
 
-            text=text,
-
-            reply_markup=InlineKeyboardMarkup(
-                keyboard
-            )
+            text=text
 
         )
 
 
-        user_data["gift"] = False
-        user_data["claimed"] += 3
+        info["gift"] = False
+
+        info["claimed"] += 3
 
         save_data(db)
 
 
         await query.edit_message_text(
 
-            "✅ درخواست شما ارسال شد.",
+            "✅ درخواست ارسال شد",
 
-            reply_markup=main_menu(user_id)
+            reply_markup=main_menu(uid)
 
         )
 
@@ -621,14 +575,16 @@ async def button_handler(
     if query.data == "back":
 
         await query.edit_message_text(
-            "🤖 منوی اصلی:",
-            reply_markup=main_menu(user_id)
+
+            "منوی اصلی",
+
+            reply_markup=main_menu(uid)
+
         )
 
-        return
-    # =========================
-# دریافت رسید پرداخت
-# =========================
+# =====================
+# رسید پرداخت
+# =====================
 
 async def photo_handler(
     update: Update,
@@ -637,55 +593,36 @@ async def photo_handler(
 
     user = update.effective_user
 
-    data = db["users"].get(
+    info = db["users"].get(
         str(user.id)
     )
 
 
-    if not data or not data.get("request"):
+    if not info or not info.get("buy"):
 
         await update.message.reply_text(
-            "⚠️ اول یک کانفیگ انتخاب کنید."
+            "⚠️ اول کانفیگ انتخاب کنید."
         )
 
         return
 
 
-    product = data["request"]
-
 
     text = (
 
-        "💰 رسید پرداخت جدید\n\n"
+        "💰 رسید پرداخت\n\n"
 
-        f"👤 نام: {user.full_name}\n"
+        f"👤 {user.full_name}\n"
 
-        f"🆔 آیدی: {user.id}\n"
+        f"🆔 {user.id}\n"
 
-        f"🔗 یوزرنیم: @{user.username if user.username else 'ندارد'}\n\n"
+        f"🔗 @{user.username or 'ندارد'}\n\n"
 
-        f"📦 کانفیگ: {product} گیگ\n\n"
+        f"📦 {info['buy']}\n\n"
 
-        "برای پاسخ روی دکمه زیر بزنید."
+        "برای پاسخ روی پیام ریپلای کنید."
 
     )
-
-
-    keyboard = [
-
-        [
-
-            InlineKeyboardButton(
-
-                "💬 پاسخ",
-
-                callback_data=f"reply_{user.id}"
-
-            )
-
-        ]
-
-    ]
 
 
     await context.bot.send_photo(
@@ -694,26 +631,22 @@ async def photo_handler(
 
         photo=update.message.photo[-1].file_id,
 
-        caption=text,
-
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        caption=text
 
     )
 
 
     await update.message.reply_text(
-
-        "✅ رسید شما ارسال شد."
-
+        "✅ رسید ارسال شد."
     )
 
 
 
-# =========================
-# پیام‌ها
-# =========================
+# =====================
+# پیام مالک
+# =====================
 
-async def text_handler(
+async def message_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
@@ -721,60 +654,63 @@ async def text_handler(
     user = update.effective_user
 
 
-    # مالک
+    # فقط مالک
 
     if user.id == db["owner"]:
 
-        target = db["reply"].get(
-            str(user.id)
-        )
+        if update.message.reply_to_message:
+
+            replied = update.message.reply_to_message.text or ""
+
+            target = None
 
 
-        if target:
+            for uid in db["users"]:
+
+                if uid in replied:
+
+                    target = uid
+                    break
 
 
-            await context.bot.copy_message(
+            if target:
 
-                chat_id=int(target),
+                await context.bot.copy_message(
 
-                from_chat_id=update.message.chat_id,
+                    chat_id=int(target),
 
-                message_id=update.message.message_id
+                    from_chat_id=update.message.chat_id,
 
-            )
+                    message_id=update.message.message_id
 
-
-            await update.message.reply_text(
-                "✅ ارسال شد."
-            )
+                )
 
 
-            del db["reply"][str(user.id)]
+                await update.message.reply_text(
+                    "✅ ارسال شد"
+                )
 
-            save_data(db)
 
-
-            return
+                return
 
 
 
     await update.message.reply_text(
-        "از منوی ربات استفاده کنید.",
+        "از منو استفاده کنید.",
         reply_markup=main_menu(user.id)
     )
 
 
 
-# =========================
+# =====================
 # پنل مالک
-# =========================
+# =====================
 
 def admin_menu():
 
     return InlineKeyboardMarkup([
 
         [
-
             InlineKeyboardButton(
                 "🟢 روشن",
                 callback_data="on"
@@ -784,16 +720,13 @@ def admin_menu():
                 "🔴 خاموش",
                 callback_data="off"
             )
-
         ],
 
         [
-
             InlineKeyboardButton(
                 "👑 انتقال مالکیت",
-                callback_data="owner_change"
+                callback_data="owner"
             )
-
         ]
 
     ])
@@ -820,9 +753,9 @@ async def panel(
 
 
 
-# =========================
-# مدیریت پنل
-# =========================
+# =====================
+# دکمه پنل
+# =====================
 
 async def admin_handler(
     update: Update,
@@ -831,75 +764,43 @@ async def admin_handler(
 
     query = update.callback_query
 
-    user = query.from_user
-
-
-    if user.id != db["owner"]:
-
-        await query.answer(
-            "دسترسی ندارید",
-            show_alert=True
-        )
+    if query.from_user.id != db["owner"]:
 
         return
-
-
-    if query.data.startswith("reply_"):
-
-        target = query.data.split("_")[1]
-
-        db["reply"][str(user.id)] = target
-
-        save_data(db)
-
-
-        await query.message.reply_text(
-            "پیام خود را ارسال کنید (متن، عکس، فایل و ...)"
-        )
-
-        return
-
 
 
     if query.data == "on":
 
         db["enabled"] = True
-
         save_data(db)
 
         await query.answer(
-            "ربات روشن شد"
+            "روشن شد"
         )
 
 
-    if query.data == "off":
+    elif query.data == "off":
 
         db["enabled"] = False
-
         save_data(db)
 
         await query.answer(
-            "ربات خاموش شد"
+            "خاموش شد"
         )
 
 
 
-# =========================
+# =====================
 # اجرا
-# =========================
+# =====================
 
 def main():
 
     app = (
-
         Application
-
         .builder()
-
         .token(BOT_TOKEN)
-
         .build()
-
     )
 
 
@@ -943,13 +844,15 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT,
-            text_handler
+            filters.ALL,
+            message_handler
         )
     )
 
 
-    print("🤖 BOT STARTED")
+    print(
+        "🤖 BOT STARTED"
+    )
 
 
     app.run_polling()
