@@ -5,135 +5,215 @@ import logging
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
+    InlineKeyboardMarkup
 )
+
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
-    filters,
+    filters
 )
 
 
-# =========================================================
+# =========================
 # تنظیمات
-# =========================================================
+# =========================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-DEFAULT_OWNER_ID = 6303851350
+OWNER_ID = 6303851350
 
-CARD_NUMBER = "6219861853906500"
-CARD_NAME = "تکین درویشی"
+CHANNEL_ID = "@etlaeeeeeee"
+CHANNEL_LINK = "https://t.me/etlaeeeeeee"
 
-CHANNEL_USERNAME = "@etlaeeeeeee"
-CHANNEL_URL = "https://t.me/etlaeeeeeee"
-
-DATA_FILE = "bot_data.json"
+DATA_FILE = "data.json"
 
 
-# =========================================================
+# =========================
 # لاگ
-# =========================================================
+# =========================
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=logging.INFO
 )
 
-logger = logging.getLogger(__name__)
 
-
-# =========================================================
-# وضعیت کاربران
-# =========================================================
-
-user_requests = {}
-
-# برای انتقال مالکیت
-transfer_requests = set()
-
-
-# =========================================================
-# اطلاعات ربات
-# =========================================================
+# =========================
+# دیتابیس
+# =========================
 
 def load_data():
 
-    default_data = {
-        "owner_id": DEFAULT_OWNER_ID,
-        "bot_enabled": True
-    }
-
     if not os.path.exists(DATA_FILE):
-        save_data(default_data)
-        return default_data
 
-    try:
+        data = {
+            "owner": OWNER_ID,
+            "users": {},
+            "pending_reply": {}
+        }
 
-        with open(DATA_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        if "owner_id" not in data:
-            data["owner_id"] = DEFAULT_OWNER_ID
-
-        if "bot_enabled" not in data:
-            data["bot_enabled"] = True
+        save_data(data)
 
         return data
 
-    except Exception as e:
 
-        logger.exception(e)
+    with open(
+        DATA_FILE,
+        "r",
+        encoding="utf-8"
+    ) as f:
 
-        return default_data
+        return json.load(f)
+
 
 
 def save_data(data):
 
+    with open(
+        DATA_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=4
+        )
+
+
+db = load_data()
+
+
+
+# =========================
+# ساخت کاربر
+# =========================
+
+def create_user(user_id):
+
+    user_id = str(user_id)
+
+    if user_id not in db["users"]:
+
+        db["users"][user_id] = {
+
+            "referrals": [],
+
+            "claimed": 0,
+
+            "gift": False
+        }
+
+        save_data(db)
+
+
+
+# =========================
+# ثبت زیرمجموعه
+# =========================
+
+def add_referral(
+    inviter,
+    new_user
+):
+
+    inviter = str(inviter)
+    new_user = str(new_user)
+
+
+    if inviter == new_user:
+        return
+
+
+    create_user(inviter)
+    create_user(new_user)
+
+
+    refs = db["users"][inviter]["referrals"]
+
+
+    # ضد ثبت دوباره
+
+    if new_user in refs:
+        return
+
+
+    refs.append(new_user)
+
+
+
+    # هر ۳ نفر یک گیگ
+
+    if len(refs) - db["users"][inviter]["claimed"] >= 3:
+
+        db["users"][inviter]["gift"] = True
+
+
+    save_data(db)
+
+
+
+# =========================
+# چک عضویت کانال
+# =========================
+
+async def check_join(
+    user_id,
+    context
+):
+
     try:
 
-        with open(DATA_FILE, "w", encoding="utf-8") as file:
-            json.dump(
-                data,
-                file,
-                ensure_ascii=False,
-                indent=4
-            )
-
-    except Exception as e:
-
-        logger.exception(e)
+        member = await context.bot.get_chat_member(
+            CHANNEL_ID,
+            user_id
+        )
 
 
-bot_data = load_data()
+        if member.status in [
+            "member",
+            "administrator",
+            "creator"
+        ]:
+
+            return True
 
 
-# =========================================================
-# گرفتن مالک فعلی
-# =========================================================
-
-def get_owner_id():
-
-    return int(bot_data["owner_id"])
+        return False
 
 
-# =========================================================
-# بررسی مالک
-# =========================================================
+    except Exception:
 
-def is_owner(user_id):
-
-    return user_id == get_owner_id()
+        return False
 
 
-# =========================================================
+
+# =========================
+# لینک دعوت
+# =========================
+
+def make_ref_link(
+    username,
+    user_id
+):
+
+    return (
+        f"https://t.me/{username}"
+        f"?start={user_id}"
+    )
+
+
+
+# =========================
 # منوی اصلی
-# =========================================================
+# =========================
 
-def main_menu():
+def main_menu(user_id):
 
     keyboard = [
 
@@ -146,130 +226,48 @@ def main_menu():
 
         [
             InlineKeyboardButton(
-                "🧪 تست کانفیگ",
-                callback_data="test"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "💬 پشتیبانی",
-                callback_data="support"
+                "👥 زیرمجموعه",
+                callback_data="ref"
             )
         ],
 
         [
             InlineKeyboardButton(
                 "📢 کانال ما",
-                url=CHANNEL_URL
+                url=CHANNEL_LINK
             )
-        ],
+        ]
 
     ]
 
-    return InlineKeyboardMarkup(keyboard)
+
+    user = db["users"].get(
+        str(user_id),
+        {}
+    )
 
 
-# =========================================================
-# منوی خرید
-# =========================================================
+    if user.get("gift"):
 
-def buy_menu():
-
-    keyboard = [
-
-        [
-            InlineKeyboardButton(
-                "36 گیگ | 1 ماهه | 200 تومان",
-                callback_data="buy_36"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "78 گیگ | 1 ماهه | 300 تومان",
-                callback_data="buy_78"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "128 گیگ | 3 ماهه | 550 تومان",
-                callback_data="buy_128"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🔙 برگشت",
-                callback_data="back"
-            )
-        ],
-
-    ]
-
-    return InlineKeyboardMarkup(keyboard)
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "🎁 دریافت کانفیگ زیرمجموعه",
+                    callback_data="gift"
+                )
+            ]
+        )
 
 
-# =========================================================
-# پنل مدیریت
-# =========================================================
-
-def admin_panel():
-
-    if bot_data["bot_enabled"]:
-
-        status_text = "🟢 وضعیت: روشن"
-
-    else:
-
-        status_text = "🔴 وضعیت: خاموش"
-
-    keyboard = [
-
-        [
-            InlineKeyboardButton(
-                status_text,
-                callback_data="admin_status"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🟢 روشن کردن ربات",
-                callback_data="admin_on"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🔴 خاموش کردن ربات",
-                callback_data="admin_off"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "👑 انتقال مالکیت",
-                callback_data="admin_transfer"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🔙 منوی اصلی",
-                callback_data="admin_back"
-            )
-        ],
-
-    ]
-
-    return InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(
+        keyboard
+    )
 
 
-# =========================================================
-# /start
-# =========================================================
+
+# =========================
+# استارت
+# =========================
 
 async def start(
     update: Update,
@@ -278,64 +276,115 @@ async def start(
 
     user = update.effective_user
 
-    user_requests.pop(user.id, None)
 
-    text = (
-        "🤖 به ربات فروش کانفیگ خوش آمدید.\n\n"
-        "📢 کانال ما:\n"
-        f"{CHANNEL_USERNAME}\n\n"
-        "یکی از گزینه‌های زیر را انتخاب کنید:"
-    )
+    # عضویت اجباری
 
-    await update.message.reply_text(
-        text,
-        reply_markup=main_menu()
+    joined = await check_join(
+        user.id,
+        context
     )
 
 
-# =========================================================
-# /panel
-# =========================================================
+    if not joined:
 
-async def panel(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+        keyboard = [
 
-    user = update.effective_user
+            [
+                InlineKeyboardButton(
+                    "📢 عضویت کانال",
+                    url=CHANNEL_LINK
+                )
+            ],
 
-    if not is_owner(user.id):
+            [
+                InlineKeyboardButton(
+                    "🔄 بررسی عضویت",
+                    callback_data="check_join"
+                )
+            ]
+
+        ]
+
 
         await update.message.reply_text(
-            "⛔ شما مالک ربات نیستید."
+            "⚠️ برای استفاده از ربات اول عضو کانال شوید.",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
         )
 
         return
 
-    await update.message.reply_text(
-        "⚙️ پنل مدیریت ربات\n\n"
-        f"👑 مالک فعلی: {get_owner_id()}",
-        reply_markup=admin_panel()
+
+
+    create_user(
+        user.id
     )
 
 
-# =========================================================
-# /ping
-# =========================================================
+    # ثبت دعوت
 
-async def ping(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+    if context.args:
+
+        inviter = context.args[0]
+
+        if inviter.isdigit():
+
+            add_referral(
+                inviter,
+                user.id
+            )
+
+
+
+    await update.message.reply_text(
+
+        "🤖 خوش آمدید\n\n"
+        "از منوی زیر استفاده کنید:",
+
+        reply_markup=main_menu(
+            user.id
+        )
+    )
+    # =========================
+# ارسال درخواست به مالک
+# =========================
+
+async def send_to_owner(
+    context,
+    user,
+    text
 ):
 
-    await update.message.reply_text(
-        "🏓 ربات فعال است."
+    keyboard = [
+
+        [
+            InlineKeyboardButton(
+                "💬 پاسخ",
+                callback_data=f"reply_{user.id}"
+            )
+        ]
+
+    ]
+
+
+    await context.bot.send_message(
+
+        chat_id=db["owner"],
+
+        text=text,
+
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+
     )
 
 
-# =========================================================
-# دکمه‌ها
-# =========================================================
+
+# =========================
+# مدیریت دکمه‌ها
+# =========================
 
 async def button_handler(
     update: Update,
@@ -346,817 +395,581 @@ async def button_handler(
 
     await query.answer()
 
+
     user = query.from_user
+
     user_id = user.id
-    data = query.data
 
 
-    # =====================================================
-    # پنل مدیریت
-    # =====================================================
+    # بررسی عضویت
 
-    if data.startswith("admin_"):
+    if query.data == "check_join":
 
-        if not is_owner(user_id):
+        joined = await check_join(
+            user_id,
+            context
+        )
 
-            await query.answer(
-                "⛔ فقط مالک می‌تواند از پنل استفاده کند.",
-                show_alert=True
+
+        if joined:
+
+            create_user(
+                user_id
             )
 
-            return
-
-
-        # -------------------------------------------------
-        # وضعیت
-        # -------------------------------------------------
-
-        if data == "admin_status":
-
-            if bot_data["bot_enabled"]:
-
-                status = "🟢 روشن"
-
-            else:
-
-                status = "🔴 خاموش"
-
-            await query.answer(
-                f"وضعیت ربات: {status}",
-                show_alert=True
-            )
-
-            return
-
-
-        # -------------------------------------------------
-        # روشن کردن
-        # -------------------------------------------------
-
-        if data == "admin_on":
-
-            bot_data["bot_enabled"] = True
-
-            save_data(bot_data)
 
             await query.edit_message_text(
-                "🟢 ربات روشن شد.\n\n"
-                "کاربران می‌توانند دوباره از ربات استفاده کنند.",
-                reply_markup=admin_panel()
+
+                "✅ عضویت تایید شد.",
+
+                reply_markup=main_menu(
+                    user_id
+                )
+
             )
 
-            return
 
+        else:
 
-        # -------------------------------------------------
-        # خاموش کردن
-        # -------------------------------------------------
+            await query.answer(
 
-        if data == "admin_off":
+                "❌ هنوز عضو کانال نیستید",
 
-            bot_data["bot_enabled"] = False
+                show_alert=True
 
-            save_data(bot_data)
-
-            await query.edit_message_text(
-                "🔴 ربات خاموش شد.\n\n"
-                "کاربران نمی‌توانند از امکانات ربات استفاده کنند.\n"
-                "پنل مالک همچنان فعال است.",
-                reply_markup=admin_panel()
             )
 
-            return
+
+        return
 
 
-        # -------------------------------------------------
-        # انتقال مالکیت
-        # -------------------------------------------------
 
-        if data == "admin_transfer":
+    # =====================
+    # زیرمجموعه
+    # =====================
 
-            transfer_requests.add(user_id)
+    if query.data == "ref":
 
-            await query.edit_message_text(
-                "👑 انتقال مالکیت\n\n"
-                "آیدی عددی مالک جدید را ارسال کنید.\n\n"
-                "مثال:\n"
-                "123456789\n\n"
-                "⚠️ بعد از انتقال، مالک فعلی دیگر به پنل مدیریت دسترسی نخواهد داشت."
+
+        me = await context.bot.get_me()
+
+
+        link = make_ref_link(
+            me.username,
+            user_id
+        )
+
+
+        count = len(
+            db["users"]
+            .get(
+                str(user_id),
+                {}
             )
+            .get(
+                "referrals",
+                []
+            )
+        )
 
-            return
-
-
-    # =====================================================
-    # برگشت پنل
-    # =====================================================
-
-    if data == "admin_back":
-
-        if not is_owner(user_id):
-
-            return
 
         await query.edit_message_text(
-            "🤖 منوی اصلی:",
-            reply_markup=main_menu()
+
+            "👥 سیستم زیرمجموعه\n\n"
+
+            f"تعداد دعوت موفق: {count}\n\n"
+
+            "برای هر ۳ نفر زیرمجموعه "
+            "۱ گیگ هدیه دریافت می‌کنید.\n\n"
+
+            "لینک دعوت شما:\n"
+
+            f"{link}",
+
+            reply_markup=main_menu(
+                user_id
+            )
+
         )
 
         return
 
 
-    # =====================================================
-    # خرید
-    # =====================================================
 
-    if data == "buy":
+    # =====================
+    # دریافت گیگ
+    # =====================
 
-        if not bot_data["bot_enabled"] and not is_owner(user_id):
+    if query.data == "gift":
 
-            await query.answer(
-                "🔴 ربات موقتاً خاموش است.",
-                show_alert=True
-            )
 
-            return
-
-        user_requests.pop(user_id, None)
-
-        await query.edit_message_text(
-            "🛒 یکی از کانفیگ‌های زیر را انتخاب کنید:",
-            reply_markup=buy_menu()
+        data = db["users"].get(
+            str(user_id)
         )
 
-        return
 
-
-    # =====================================================
-    # 36 گیگ
-    # =====================================================
-
-    if data == "buy_36":
-
-        if not bot_data["bot_enabled"] and not is_owner(user_id):
+        if not data or not data["gift"]:
 
             await query.answer(
-                "🔴 ربات موقتاً خاموش است.",
+
+                "❌ هنوز شرایط دریافت کامل نشده",
+
                 show_alert=True
+
             )
 
             return
 
-        user_requests[user_id] = "buy_36"
+
 
         text = (
-            "📦 کانفیگ 36 گیگ\n"
-            "⏱ مدت: 1 ماهه\n"
-            "💰 قیمت: 200 تومان\n\n"
-            f"💳 شماره کارت:\n"
-            f"{CARD_NUMBER}\n\n"
-            f"👤 به نام:\n"
-            f"{CARD_NAME}\n\n"
-            "💵 مبلغ 200 تومان بزنید.\n\n"
-            "📸 بعد از پرداخت، عکس شات/رسید پرداخت "
-            "را همینجا ارسال کنید."
+
+            "🎁 درخواست کانفیگ زیرمجموعه\n\n"
+
+            f"👤 نام: {user.full_name}\n"
+
+            f"🆔 آیدی: {user.id}\n"
+
+            f"🔗 یوزرنیم: @{user.username if user.username else 'ندارد'}\n\n"
+
+            "کاربر ۳ زیرمجموعه آورده و درخواست ۱ گیگ دارد."
+
         )
 
-        await query.edit_message_text(text)
 
-        return
+        await send_to_owner(
 
-
-    # =====================================================
-    # 78 گیگ
-    # =====================================================
-
-    if data == "buy_78":
-
-        if not bot_data["bot_enabled"] and not is_owner(user_id):
-
-            await query.answer(
-                "🔴 ربات موقتاً خاموش است.",
-                show_alert=True
-            )
-
-            return
-
-        user_requests[user_id] = "buy_78"
-
-        text = (
-            "📦 کانفیگ 78 گیگ\n"
-            "⏱ مدت: 1 ماهه\n"
-            "💰 قیمت: 300 تومان\n\n"
-            f"💳 شماره کارت:\n"
-            f"{CARD_NUMBER}\n\n"
-            f"👤 به نام:\n"
-            f"{CARD_NAME}\n\n"
-            "💵 مبلغ 300 تومان بزنید.\n\n"
-            "📸 بعد از پرداخت، عکس شات/رسید پرداخت "
-            "را همینجا ارسال کنید."
-        )
-
-        await query.edit_message_text(text)
-
-        return
-
-
-    # =====================================================
-    # 128 گیگ
-    # =====================================================
-
-    if data == "buy_128":
-
-        if not bot_data["bot_enabled"] and not is_owner(user_id):
-
-            await query.answer(
-                "🔴 ربات موقتاً خاموش است.",
-                show_alert=True
-            )
-
-            return
-
-        user_requests[user_id] = "buy_128"
-
-        text = (
-            "📦 کانفیگ 128 گیگ\n"
-            "⏱ مدت: 3 ماهه\n"
-            "💰 قیمت: 550 تومان\n\n"
-            f"💳 شماره کارت:\n"
-            f"{CARD_NUMBER}\n\n"
-            f"👤 به نام:\n"
-            f"{CARD_NAME}\n\n"
-            "💵 مبلغ 550 تومان بزنید.\n\n"
-            "📸 بعد از پرداخت، عکس شات/رسید پرداخت "
-            "را همینجا ارسال کنید."
-        )
-
-        await query.edit_message_text(text)
-
-        return
-
-
-    # =====================================================
-    # تست
-    # =====================================================
-
-    if data == "test":
-
-        if not bot_data["bot_enabled"] and not is_owner(user_id):
-
-            await query.answer(
-                "🔴 ربات موقتاً خاموش است.",
-                show_alert=True
-            )
-
-            return
-
-        user_requests[user_id] = "test"
-
-        await query.edit_message_text(
-            "🧪 درخواست تست شما ثبت شد.\n\n"
-            "⚡ درخواست برای مالک ارسال شد."
-        )
-
-        await send_test_request_to_owner(
             context,
-            user
+
+            user,
+
+            text
+
         )
+
+
+        # بعد از ارسال درخواست
+
+        data["gift"] = False
+
+
+        # سه نفر مصرف شد
+
+        data["claimed"] += 3
+
+
+        save_data(db)
+
+
+
+        await query.edit_message_text(
+
+            "✅ درخواست شما برای مالک ارسال شد.\n\n"
+
+            "بعد از بررسی، کانفیگ ارسال می‌شود.",
+
+            reply_markup=main_menu(
+                user_id
+            )
+
+        )
+
 
         return
 
 
-    # =====================================================
-    # پشتیبانی
-    # =====================================================
 
-    if data == "support":
+    # =====================
+    # پاسخ مالک
+    # =====================
 
-        if not bot_data["bot_enabled"] and not is_owner(user_id):
+    if query.data.startswith("reply_"):
+
+
+        if user_id != db["owner"]:
 
             await query.answer(
-                "🔴 ربات موقتاً خاموش است.",
+
+                "⛔ فقط مالک",
+
                 show_alert=True
+
             )
 
             return
 
-        user_requests[user_id] = "support"
 
-        await query.edit_message_text(
-            "💬 پیام خود را همینجا ارسال کنید "
-            "تا برای پشتیبانی ارسال شود."
+
+        target = query.data.split("_")[1]
+
+
+        db["pending_reply"][str(user_id)] = target
+
+
+        save_data(db)
+
+
+        await query.message.reply_text(
+
+            "✍️ پیام، عکس، فایل یا هر چیزی که می‌خواهید برای کاربر ارسال شود را بفرستید."
+
         )
+
 
         return
 
+# =========================
+# پیام‌های مالک و کاربران
+# =========================
 
-    # =====================================================
-    # برگشت خرید
-    # =====================================================
-
-    if data == "back":
-
-        user_requests.pop(user_id, None)
-
-        await query.edit_message_text(
-            "🤖 منوی اصلی:",
-            reply_markup=main_menu()
-        )
-
-        return
-
-
-# =========================================================
-# درخواست تست برای مالک
-# =========================================================
-
-async def send_test_request_to_owner(
-    context: ContextTypes.DEFAULT_TYPE,
-    user
-):
-
-    owner_id = get_owner_id()
-
-    username = (
-        f"@{user.username}"
-        if user.username
-        else "ندارد"
-    )
-
-    text = (
-        "🧪 درخواست تست کانفیگ\n\n"
-        f"👤 نام: {user.full_name}\n"
-        f"🆔 آیدی عددی: {user.id}\n"
-        f"🔗 یوزرنیم: {username}\n\n"
-        "برای ارسال کانفیگ تست، روی همین پیام Reply کنید."
-    )
-
-    await context.bot.send_message(
-        chat_id=owner_id,
-        text=text
-    )
-
-
-# =========================================================
-# پیام متنی
-# =========================================================
-
-async def text_handler(
+async def message_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    if not update.message:
-        return
-
     user = update.effective_user
-    user_id = user.id
 
 
-    # =====================================================
-    # انتقال مالکیت
-    # =====================================================
+    # =====================
+    # پاسخ مالک به کاربر
+    # =====================
 
-    if is_owner(user_id) and user_id in transfer_requests:
+    if user.id == db["owner"]:
 
-        text = update.message.text.strip()
+        target = db["pending_reply"].get(
+            str(user.id)
+        )
 
-        try:
 
-            new_owner_id = int(text)
+        if target:
 
-        except ValueError:
+            try:
 
-            await update.message.reply_text(
-                "❌ آیدی معتبر نیست.\n\n"
-                "لطفاً فقط آیدی عددی را ارسال کنید."
-            )
+                await context.bot.copy_message(
+
+                    chat_id=int(target),
+
+                    from_chat_id=update.message.chat_id,
+
+                    message_id=update.message.message_id
+
+                )
+
+
+                await update.message.reply_text(
+                    "✅ پیام برای کاربر ارسال شد."
+                )
+
+
+                del db["pending_reply"][str(user.id)]
+
+                save_data(db)
+
+
+            except Exception as e:
+
+                await update.message.reply_text(
+                    "❌ ارسال نشد."
+                )
 
             return
 
 
-        if new_owner_id <= 0:
 
-            await update.message.reply_text(
-                "❌ آیدی واردشده معتبر نیست."
+    # =====================
+    # کاربر
+    # =====================
+
+    await update.message.reply_text(
+
+        "لطفاً از منوی ربات استفاده کنید.",
+
+        reply_markup=main_menu(
+            user.id
+        )
+
+    )
+
+
+
+# =========================
+# پنل مدیریت
+# =========================
+
+def admin_menu():
+
+    keyboard = [
+
+        [
+            InlineKeyboardButton(
+                "🟢 روشن",
+                callback_data="bot_on"
+            ),
+
+            InlineKeyboardButton(
+                "🔴 خاموش",
+                callback_data="bot_off"
             )
+        ],
 
-            return
+        [
+            InlineKeyboardButton(
+                "👑 انتقال مالکیت",
+                callback_data="change_owner"
+            )
+        ]
 
-
-        # انتقال
-        old_owner = get_owner_id()
-
-        bot_data["owner_id"] = new_owner_id
-
-        save_data(bot_data)
-
-        transfer_requests.discard(user_id)
-
-        await update.message.reply_text(
-            "👑 انتقال مالکیت انجام شد.\n\n"
-            f"مالک قبلی: {old_owner}\n"
-            f"مالک جدید: {new_owner_id}\n\n"
-            "⚠️ از این لحظه مالک جدید می‌تواند با /panel وارد پنل مدیریت شود."
-        )
-
-        return
+    ]
 
 
-    # =====================================================
-    # مالک
-    # =====================================================
-
-    if is_owner(user_id):
-
-        await handle_owner_reply(
-            update,
-            context
-        )
-
-        return
+    return InlineKeyboardMarkup(
+        keyboard
+    )
 
 
-    # =====================================================
-    # اگر ربات خاموش است
-    # =====================================================
 
-    if not bot_data["bot_enabled"]:
+async def panel(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    if update.effective_user.id != db["owner"]:
 
         await update.message.reply_text(
-            "🔴 ربات در حال حاضر خاموش است.\n\n"
-            "لطفاً بعداً دوباره تلاش کنید."
+            "⛔ دسترسی ندارید."
         )
 
         return
 
-
-    # =====================================================
-    # پشتیبانی
-    # =====================================================
-
-    request_type = user_requests.get(user_id)
-
-    if request_type == "support":
-
-        await send_support_to_owner(
-            update,
-            context
-        )
-
-        user_requests.pop(user_id, None)
-
-        await update.message.reply_text(
-            "✅ پیام شما برای پشتیبانی ارسال شد."
-        )
-
-        return
 
 
     await update.message.reply_text(
-        "لطفاً یکی از گزینه‌های منوی اصلی را انتخاب کنید.",
-        reply_markup=main_menu()
+
+        "⚙️ پنل مدیریت",
+
+        reply_markup=admin_menu()
+
     )
 
 
-# =========================================================
-# رسید پرداخت
-# =========================================================
 
-async def receipt_handler(
+# =========================
+# دکمه‌های مدیریت
+# =========================
+
+async def admin_buttons(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user = update.effective_user
+    query = update.callback_query
 
-    if is_owner(user.id):
-        return
+    user = query.from_user
 
-    if not bot_data["bot_enabled"]:
 
-        await update.message.reply_text(
-            "🔴 ربات در حال حاضر خاموش است."
-        )
+    if user.id != db["owner"]:
 
-        return
-
-    request_type = user_requests.get(user.id)
-
-    if request_type not in (
-        "buy_36",
-        "buy_78",
-        "buy_128",
-    ):
-
-        await update.message.reply_text(
-            "⚠️ ابتدا از منوی خرید، یکی از کانفیگ‌ها را انتخاب کنید."
+        await query.answer(
+            "⛔ فقط مالک",
+            show_alert=True
         )
 
         return
 
 
-    if request_type == "buy_36":
 
-        product = "36 گیگ - 1 ماهه"
-        price = "200 تومان"
+    if query.data == "bot_on":
 
-    elif request_type == "buy_78":
+        db["enabled"] = True
 
-        product = "78 گیگ - 1 ماهه"
-        price = "300 تومان"
-
-    else:
-
-        product = "128 گیگ - 3 ماهه"
-        price = "550 تومان"
+        save_data(db)
 
 
-    username = (
-        f"@{user.username}"
-        if user.username
-        else "ندارد"
-    )
+        await query.answer(
+            "🟢 روشن شد"
+        )
 
 
-    caption = (
-        "💰 رسید پرداخت جدید\n\n"
-        f"📦 محصول: {product}\n"
-        f"💵 مبلغ: {price}\n\n"
-        f"👤 نام: {user.full_name}\n"
-        f"🆔 آیدی عددی: {user.id}\n"
-        f"🔗 یوزرنیم: {username}\n\n"
-        "⬇️ برای ارسال کانفیگ، روی همین پیام Reply کنید."
-    )
+
+    elif query.data == "bot_off":
+
+        db["enabled"] = False
+
+        save_data(db)
 
 
-    await context.bot.send_photo(
-        chat_id=get_owner_id(),
-        photo=update.message.photo[-1].file_id,
-        caption=caption
-    )
+        await query.answer(
+            "🔴 خاموش شد"
+        )
 
 
-    await update.message.reply_text(
-        "✅ رسید شما با موفقیت برای مالک ارسال شد.\n\n"
-        "⚡ پس از بررسی، کانفیگ برای شما ارسال خواهد شد."
-    )
+
+    elif query.data == "change_owner":
+
+        await query.message.reply_text(
+
+            "آیدی عددی مالک جدید را ارسال کنید."
+
+        )
 
 
-# =========================================================
-# پشتیبانی
-# =========================================================
+        db["change_owner"] = True
 
-async def send_support_to_owner(
+        save_data(db)
+
+
+
+# =========================
+# انتقال مالکیت
+# =========================
+
+async def owner_change(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user = update.effective_user
+    if not db.get("change_owner"):
 
-    username = (
-        f"@{user.username}"
-        if user.username
-        else "ندارد"
-    )
-
-    text = (
-        "💬 پیام جدید پشتیبانی\n\n"
-        f"👤 نام: {user.full_name}\n"
-        f"🆔 آیدی عددی: {user.id}\n"
-        f"🔗 یوزرنیم: {username}\n\n"
-        "📝 پیام کاربر:\n"
-        f"{update.message.text}\n\n"
-        "⬇️ برای پاسخ، روی همین پیام Reply کنید."
-    )
-
-    await context.bot.send_message(
-        chat_id=get_owner_id(),
-        text=text
-    )
+        return False
 
 
-# =========================================================
-# پاسخ مالک
-# =========================================================
+    if update.effective_user.id != db["owner"]:
 
-async def handle_owner_reply(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+        return False
 
-    message = update.message
-
-    if not message.reply_to_message:
-
-        await message.reply_text(
-            "⚠️ برای ارسال پاسخ به کاربر، "
-            "روی پیام درخواست همان کاربر Reply کنید."
-        )
-
-        return
-
-
-    replied_message = message.reply_to_message
-
-    target_user_id = extract_user_id(
-        replied_message.text
-        or replied_message.caption
-        or ""
-    )
-
-
-    if not target_user_id:
-
-        await message.reply_text(
-            "❌ آیدی کاربر از پیام Reply پیدا نشد."
-        )
-
-        return
-
-
-    if not message.text:
-
-        await message.reply_text(
-            "⚠️ پاسخ باید به صورت متن ارسال شود."
-        )
-
-        return
 
 
     try:
 
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=(
-                "✅ پاسخ شما آماده است.\n\n"
-                f"{message.text}"
-            )
+        new_owner = int(
+            update.message.text
         )
 
 
-        await message.reply_text(
-            "✅ پیام با موفقیت برای کاربر ارسال شد."
+        db["owner"] = new_owner
+
+        db["change_owner"] = False
+
+        save_data(db)
+
+
+
+        await update.message.reply_text(
+
+            "👑 مالکیت منتقل شد."
+
         )
 
 
-    except Exception as e:
+    except:
 
-        logger.exception(e)
+        await update.message.reply_text(
 
-        await message.reply_text(
-            "❌ ارسال پیام ناموفق بود.\n"
-            "ممکن است کاربر ربات را بلاک کرده باشد."
+            "❌ آیدی اشتباه است."
+
         )
 
 
-# =========================================================
-# استخراج آیدی
-# =========================================================
-
-def extract_user_id(text):
-
-    if not text:
-        return None
-
-    marker = "آیدی عددی:"
-
-    if marker not in text:
-        return None
-
-    try:
-
-        part = text.split(
-            marker,
-            1
-        )[1]
-
-        line = part.split(
-            "\n",
-            1
-        )[0].strip()
-
-        return int(line)
-
-    except Exception:
-
-        return None
+    return True
 
 
-# =========================================================
-# عکس
-# =========================================================
 
-async def photo_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    await receipt_handler(
-        update,
-        context
-    )
-
-
-# =========================================================
+# =========================
 # اجرای ربات
-# =========================================================
+# =========================
 
 def main():
 
     if not BOT_TOKEN:
 
-        raise RuntimeError(
-            "BOT_TOKEN پیدا نشد! "
-            "در GitHub Secrets یک Secret با نام BOT_TOKEN بساز."
+        raise Exception(
+            "BOT_TOKEN پیدا نشد"
         )
 
 
+
     app = (
+
         Application
+
         .builder()
+
         .token(BOT_TOKEN)
+
         .build()
+
     )
 
 
-    # =========================
-    # دستورات
-    # =========================
 
     app.add_handler(
+
         CommandHandler(
             "start",
             start
         )
+
     )
 
-    app.add_handler(
-        CommandHandler(
-            "ping",
-            ping
-        )
-    )
 
     app.add_handler(
+
         CommandHandler(
             "panel",
             panel
         )
+
     )
 
 
-    # =========================
-    # دکمه‌ها
-    # =========================
-
     app.add_handler(
+
         CallbackQueryHandler(
             button_handler
         )
+
     )
 
-
-    # =========================
-    # عکس
-    # =========================
 
     app.add_handler(
-        MessageHandler(
-            filters.PHOTO,
-            photo_handler
+
+        CallbackQueryHandler(
+            admin_buttons,
+            pattern="^(bot_|change_owner)"
         )
+
     )
 
-
-    # =========================
-    # متن
-    # =========================
 
     app.add_handler(
+
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            text_handler
+            filters.ALL,
+            owner_change
         )
+
     )
 
 
-    print("================================")
-    print("🤖 BOT STARTED")
-    print("👑 OWNER:", get_owner_id())
-    print("🟢 ENABLED:", bot_data["bot_enabled"])
-    print("📢 CHANNEL:", CHANNEL_USERNAME)
-    print("================================")
+    app.add_handler(
 
+        MessageHandler(
+            filters.ALL,
+            message_handler
+        )
 
-    app.run_polling(
-        drop_pending_updates=True
     )
 
 
-# =========================================================
-# شروع
-# =========================================================
+    print(
+        "🤖 BOT STARTED"
+    )
+
+
+    app.run_polling()
+
+
 
 if __name__ == "__main__":
+
     main()
